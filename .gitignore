@@ -42,6 +42,7 @@ yarn-error.*
 
 # local Firebase keys (copy from src/config/firebase.example.ts)
 src/config/firebase.ts
+src/config/firebase.ts.txt
 
 # downloaded Expo Go binaries
 *.apk

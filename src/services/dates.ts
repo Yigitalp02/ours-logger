@@ -13,12 +13,18 @@ import {
 
 import { requireDb } from '@/config/firebase';
 import { createId } from '@/lib/id';
-import type { DateComment, DateEntry, DatePhoto, DatePlace, DateStatus, Place } from '@/types';
+import type { DateComment, DateEntry, DatePhoto, DatePlace, DateRatings, DateStatus, Place } from '@/types';
 import { uploadImage } from '@/services/photos';
 
 function toDate(value: Timestamp | Date | undefined): Date {
   if (!value) return new Date();
   if (value instanceof Date) return value;
+  return value.toDate();
+}
+
+function toDateOrNull(value: Timestamp | Date | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   return value.toDate();
 }
 
@@ -48,17 +54,30 @@ function mapPlaces(data: Record<string, unknown>): DatePlace[] {
   ];
 }
 
+function mapRatings(data: Record<string, unknown>): DateRatings {
+  const raw = data.ratings;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return Object.fromEntries(
+      Object.entries(raw as Record<string, unknown>).map(([profileId, value]) => [profileId, Number(value ?? 0)]),
+    );
+  }
+  return {};
+}
+
 function mapDate(id: string, data: Record<string, unknown>): DateEntry {
   const places = mapPlaces(data);
+  const ratings = mapRatings(data);
+  const overallRating = Number(data.overallRating ?? 0);
   return {
     id,
     title: (data.title as string) ?? 'Untitled date',
-    happenedAt: toDate(data.happenedAt as Timestamp | Date | undefined),
+    happenedAt: toDateOrNull(data.happenedAt as Timestamp | Date | null | undefined),
     status: data.status === 'planned' ? 'planned' : 'logged',
     categories: (data.categories as string[]) ?? [],
     place: places[0] ?? (data.place as Place | null) ?? null,
     places,
-    overallRating: Number(data.overallRating ?? 0),
+    ratings,
+    overallRating,
     placeRating: Number(places[0]?.rating ?? data.placeRating ?? 0),
     cover: (data.cover as DatePhoto | null) ?? null,
     photos: (data.photos as DatePhoto[]) ?? [],
@@ -70,7 +89,7 @@ function mapDate(id: string, data: Record<string, unknown>): DateEntry {
 }
 
 export function listenDates(onChange: (dates: DateEntry[]) => void, onError: (error: Error) => void) {
-  const q = query(collection(requireDb(), 'dates'), orderBy('happenedAt', 'desc'));
+  const q = query(collection(requireDb(), 'dates'), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -82,12 +101,13 @@ export function listenDates(onChange: (dates: DateEntry[]) => void, onError: (er
 
 export type DateDraft = {
   title: string;
-  happenedAt: Date;
+  happenedAt: Date | null;
   status?: DateStatus;
   categories: string[];
   place?: Place | null;
   places: DatePlace[];
   overallRating: number;
+  ratings?: DateRatings;
   placeRating?: number;
   commentText?: string;
   cover?: DatePhoto | null;
@@ -115,6 +135,7 @@ export async function createDate(profileId: string, draft: DateDraft): Promise<s
     categories: draft.categories,
     place: draft.places[0] ?? null,
     places: draft.places,
+    ratings: draft.ratings ?? {},
     overallRating: draft.overallRating,
     placeRating: draft.places[0]?.rating ?? 0,
     cover: null,
@@ -160,6 +181,7 @@ export async function updateDate(dateId: string, profileId: string, draft: DateD
     categories: draft.categories,
     place: draft.places[0] ?? null,
     places: draft.places,
+    ratings: draft.ratings ?? {},
     overallRating: draft.overallRating,
     placeRating: draft.places[0]?.rating ?? 0,
     cover,
@@ -168,11 +190,15 @@ export async function updateDate(dateId: string, profileId: string, draft: DateD
   });
 }
 
-export async function setDateStatus(dateId: string, status: DateStatus): Promise<void> {
-  await updateDoc(doc(requireDb(), 'dates', dateId), {
+export async function setDateStatus(dateId: string, status: DateStatus, happenedAt?: Date | null): Promise<void> {
+  const payload: Record<string, unknown> = {
     status,
     updatedAt: serverTimestamp(),
-  });
+  };
+  if (status === 'logged') {
+    payload.happenedAt = happenedAt ?? new Date();
+  }
+  await updateDoc(doc(requireDb(), 'dates', dateId), payload);
 }
 
 export async function addComment(date: DateEntry, profileId: string, text: string): Promise<void> {

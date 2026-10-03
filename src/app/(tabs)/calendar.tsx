@@ -7,7 +7,7 @@ import { DateCard } from '@/components/DateCard';
 import { EmptyState } from '@/components/EmptyState';
 import { MonthCalendar } from '@/components/MonthCalendar';
 import { useApp } from '@/context/AppContext';
-import { formatMonthYear, sameDay } from '@/lib/format';
+import { formatMonthYear, formatWhenShort, sameDay } from '@/lib/format';
 import { colors, radius } from '@/theme';
 
 export default function CalendarScreen() {
@@ -25,7 +25,12 @@ export default function CalendarScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.monthBar}>
         <Pressable onPress={() => shiftMonth(-1)} style={styles.arrow}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -47,12 +52,12 @@ export default function CalendarScreen() {
         </View>
       </View>
       <Text style={styles.section}>
-        {selected ? selected.toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'Pick a day'}
+        {selected ? formatWhenShort(selected) : 'Pick a day'}
       </Text>
       {selectedDates.length ? (
         selectedDates.map((item) => (
           <View key={item.id} style={styles.cardWrap}>
-            <DateCard item={item} onPress={() => router.push(`/date/${item.id}`)} />
+            <DateCard compact item={item} onPress={() => router.push(`/date/${item.id}`)} />
           </View>
         ))
       ) : (
@@ -64,7 +69,7 @@ export default function CalendarScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { padding: 16, paddingBottom: 80 },
   monthBar: {
     flexDirection: 'row',
     alignItems: 'center',

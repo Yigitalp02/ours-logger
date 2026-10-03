@@ -13,7 +13,9 @@ import {
   type DateDraft,
 } from '@/services/dates';
 import { createProfile, deleteProfile, listenProfiles, updateProfile } from '@/services/profiles';
-import type { DateEntry, DateStatus, Profile } from '@/types';
+import { createSpinPlace, deleteSpinPlace, listenSpinPlaces, updateSpinPlace } from '@/services/spinPlaces';
+import { listenWheelExcludedKeys, saveWheelExcludedKeys } from '@/services/wheelSettings';
+import type { DateEntry, DateStatus, Place, Profile, SpinPlace } from '@/types';
 import { isPlanned } from '@/types';
 
 const PROFILE_KEY = '@ours/profileId';
@@ -27,6 +29,9 @@ type AppContextValue = {
   dates: DateEntry[];
   loggedDates: DateEntry[];
   plannedDates: DateEntry[];
+  spinPlaces: SpinPlace[];
+  wheelExcludedKeys: string[];
+  setWheelIncluded: (key: string, included: boolean) => Promise<void>;
   selectProfile: (profileId: string) => Promise<void>;
   signOutProfile: () => Promise<void>;
   addProfile: (name: string, photoUri?: string | null) => Promise<string>;
@@ -37,6 +42,9 @@ type AppContextValue = {
   removeDateComment: (date: DateEntry, commentId: string) => Promise<void>;
   changeDateStatus: (dateId: string, status: DateStatus) => Promise<void>;
   removeDate: (dateId: string) => Promise<void>;
+  addSpinPlace: (values: { name: string; details: string; place: Place | null }) => Promise<string>;
+  saveSpinPlace: (placeId: string, values: { name: string; details: string; place: Place | null }) => Promise<void>;
+  removeSpinPlace: (placeId: string) => Promise<void>;
   removeProfile: () => Promise<void>;
 };
 
@@ -48,6 +56,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [dates, setDates] = useState<DateEntry[]>([]);
+  const [spinPlaces, setSpinPlaces] = useState<SpinPlace[]>([]);
+  const [wheelExcludedKeys, setWheelExcludedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -79,6 +89,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (listenError) => setError(listenError.message),
       ),
     );
+    unsubscribers.push(
+      listenSpinPlaces(
+        (next) => setSpinPlaces(next),
+        (listenError) => setError(listenError.message),
+      ),
+    );
+    unsubscribers.push(
+      listenWheelExcludedKeys(
+        (next) => setWheelExcludedKeys(next),
+        (listenError) => setError(listenError.message),
+      ),
+    );
 
     return () => {
       active = false;
@@ -91,13 +113,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [profiles, profileId],
   );
 
-  const loggedDates = useMemo(() => dates.filter((item) => !isPlanned(item)), [dates]);
+  const loggedDates = useMemo(
+    () =>
+      dates
+        .filter((item) => !isPlanned(item))
+        .slice()
+        .sort((a, b) => (b.happenedAt?.getTime() ?? 0) - (a.happenedAt?.getTime() ?? 0)),
+    [dates],
+  );
   const plannedDates = useMemo(
     () =>
       dates
         .filter(isPlanned)
         .slice()
-        .sort((a, b) => a.happenedAt.getTime() - b.happenedAt.getTime()),
+        .sort((a, b) => {
+          if (!a.happenedAt && !b.happenedAt) return 0;
+          if (!a.happenedAt) return -1;
+          if (!b.happenedAt) return 1;
+          return a.happenedAt.getTime() - b.happenedAt.getTime();
+        }),
     [dates],
   );
 
@@ -111,6 +145,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dates,
       loggedDates,
       plannedDates,
+      spinPlaces,
+      wheelExcludedKeys,
+      setWheelIncluded: async (key, included) => {
+        const hidden = new Set(wheelExcludedKeys);
+        if (included) hidden.delete(key);
+        else hidden.add(key);
+        const next = [...hidden];
+        setWheelExcludedKeys(next);
+        await saveWheelExcludedKeys(next);
+      },
       selectProfile: async (id) => {
         setProfileId(id);
         await AsyncStorage.setItem(PROFILE_KEY, id);
@@ -146,10 +190,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await deleteComment(date, commentId, currentProfile.id);
       },
       changeDateStatus: async (dateId, status) => {
-        await setDateStatus(dateId, status);
+        const entry = dates.find((item) => item.id === dateId);
+        await setDateStatus(dateId, status, entry?.happenedAt ?? new Date());
       },
       removeDate: async (dateId) => {
         await deleteDate(dateId);
+      },
+      addSpinPlace: async (values) => {
+        if (!currentProfile) throw new Error('No profile selected');
+        return createSpinPlace(currentProfile.id, values);
+      },
+      saveSpinPlace: async (placeId, values) => {
+        await updateSpinPlace(placeId, values);
+      },
+      removeSpinPlace: async (placeId) => {
+        await deleteSpinPlace(placeId);
       },
       removeProfile: async () => {
         if (!currentProfile) throw new Error('No profile selected');
@@ -158,7 +213,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.removeItem(PROFILE_KEY);
       },
     }),
-    [currentProfile, dates, error, loggedDates, plannedDates, profiles, ready],
+    [currentProfile, dates, error, loggedDates, plannedDates, profiles, ready, spinPlaces, wheelExcludedKeys],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

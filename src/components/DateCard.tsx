@@ -3,21 +3,44 @@ import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StarRating } from '@/components/StarRating';
-import { formatShortDate, formatStars } from '@/lib/format';
+import { useApp } from '@/context/AppContext';
+import { formatStars, formatWhenShort } from '@/lib/format';
 import { colors, radius } from '@/theme';
-import { coverUrl, datePlaces, isPlanned, type DateEntry } from '@/types';
+import { addedByLabel, coverUrl, datePlaces, dateRatings, isPlanned, type DateEntry, type Profile } from '@/types';
 
 type Props = {
   item: DateEntry;
   onPress: () => void;
+  compact?: boolean;
 };
 
-export function DateCard({ item, onPress }: Props) {
+function PersonStars({ profile, value }: { profile: Profile; value: number }) {
+  return (
+    <View style={styles.personStars}>
+      <Text style={styles.personName} numberOfLines={1}>
+        {profile.name}
+      </Text>
+      {value > 0 ? (
+        <View style={styles.stars}>
+          <StarRating value={value} readonly size={13} />
+          <Text style={styles.score}>{formatStars(value)}</Text>
+        </View>
+      ) : (
+        <Text style={styles.scoreMuted}>No stars yet</Text>
+      )}
+    </View>
+  );
+}
+
+export function DateCard({ item, onPress, compact = false }: Props) {
+  const { profiles } = useApp();
   const cover = coverUrl(item);
   const planned = isPlanned(item);
+  const ratings = dateRatings(item);
+
   return (
     <Pressable onPress={onPress} style={styles.card}>
-      <View style={styles.poster}>
+      <View style={[styles.poster, compact && styles.posterCompact]}>
         {cover ? (
           <Image source={{ uri: cover }} style={styles.image} contentFit="cover" />
         ) : (
@@ -35,16 +58,20 @@ export function DateCard({ item, onPress }: Props) {
         <Text style={styles.title} numberOfLines={2}>
           {item.title}
         </Text>
-        <Text style={styles.date}>{formatShortDate(item.happenedAt)}</Text>
+        <Text style={styles.date}>{formatWhenShort(item.happenedAt)}</Text>
         {planned ? (
-          <View style={styles.badge}>
-            <Ionicons name="bookmark" size={12} color={colors.rose} />
-            <Text style={styles.badgeText}>Planned</Text>
-          </View>
+          <>
+            <View style={styles.badge}>
+              <Ionicons name="bookmark" size={12} color={colors.rose} />
+              <Text style={styles.badgeText}>Planned</Text>
+            </View>
+            <Text style={styles.addedBy}>{addedByLabel(item.createdBy, profiles)}</Text>
+          </>
         ) : (
-          <View style={styles.stars}>
-            <StarRating value={item.overallRating} readonly size={16} />
-            <Text style={styles.score}>{formatStars(item.overallRating)}</Text>
+          <View style={styles.ratings}>
+            {profiles.map((profile) => (
+              <PersonStars key={profile.id} profile={profile} value={ratings[profile.id] ?? 0} />
+            ))}
           </View>
         )}
         {datePlaces(item).length ? (
@@ -74,13 +101,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   poster: {
-    width: 92,
-    height: 124,
+    width: '46%',
+    aspectRatio: 3 / 4,
+    overflow: 'hidden',
     backgroundColor: colors.bgElevated,
   },
+  posterCompact: {
+    width: '40%',
+    aspectRatio: 1,
+  },
   image: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFill,
   },
   placeholder: {
     flex: 1,
@@ -94,8 +125,11 @@ const styles = StyleSheet.create({
   },
   meta: {
     flex: 1,
-    padding: 12,
+    paddingVertical: 12,
+    paddingLeft: 14,
+    paddingRight: 12,
     gap: 4,
+    justifyContent: 'center',
   },
   title: {
     color: colors.text,
@@ -117,16 +151,35 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
+  addedBy: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  ratings: {
+    gap: 4,
+    marginTop: 2,
+  },
+  personStars: {
+    gap: 2,
+  },
+  personName: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   stars: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
+    gap: 6,
   },
   score: {
     color: colors.star,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
+  },
+  scoreMuted: {
+    color: colors.textDim,
+    fontSize: 12,
   },
   place: {
     color: colors.text,

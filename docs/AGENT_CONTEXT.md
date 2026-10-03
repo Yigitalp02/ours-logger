@@ -89,13 +89,14 @@ Max 2 documents. Photos: Storage `profiles/{id}/{file}.jpg`.
 
 ```
 title: string
-happenedAt: Timestamp | Date
+happenedAt: Timestamp | Date | null   // null = plan with no day yet ("I'm not sure yet")
 status: 'logged' | 'planned'          // missing status => treat as logged
 categories: string[]
 place: Place | null                   // first place, kept for older docs
 places: DatePlace[]                   // source of truth for locations
 placeRating: number                   // first place rating, legacy
-overallRating: number                 // 0–5, half steps
+ratings: { [profileId]: number }      // each person's date stars
+overallRating: number                 // average of ratings; legacy single score if ratings empty
 cover: DatePhoto | null               // list poster + detail hero
 photos: DatePhoto[]                   // extra stills only, not the cover
 comments: DateComment[]
@@ -108,6 +109,17 @@ Place      { name, address, lat, lng }
 DatePlace  Place & { id, rating }
 DatePhoto  { id, url, uploadedBy }
 DateComment { id, profileId, text, createdAt: ISO string }
+```
+
+### `spinPlaces/{id}`
+
+Custom places added on the Spin tab.
+
+### `settings/wheel`
+
+```
+excludedKeys: string[]   // WheelOption keys left off the wheel
+updatedAt: Timestamp
 ```
 
 Old documents may only have `place` / `placeRating`. Always read through `datePlaces(entry)` in `src/types.ts`.
@@ -130,17 +142,21 @@ Helpers: `src/config/firebase.ts` (local, gitignored), `isFirebaseConfigured`, `
 
 ### Tabs (`src/app/(tabs)/`)
 
-1. **Diary** `index.tsx` — logged dates only, FAB → `/date-form`
+1. **Diary** `index.tsx` — logged dates only, FAB → `/date-form`. Collapsed browse row (tap to expand): newest/oldest, all time / month arrows / last 3 months / this year, category chips, pages of 8. Helpers in `src/lib/diary.ts`.
 2. **Plans** `plans.tsx` — `status === 'planned'`, FAB → `/date-form?status=planned`
 3. **Calendar** `calendar.tsx` — month grid; green dots = logged, rose dots = planned
-4. **Places** `places.tsx` — flattened list + combined map of all `datePlaces`
+4. **Spin** `spin.tsx` — wheel from plans + custom places; checkboxes toggle `settings/wheel.excludedKeys`
 5. **Profile** `profile.tsx` — edit, switch (clears AsyncStorage), delete profile
 
 ### Date form `date-form.tsx`
 
 Query: `id` (edit), `status=planned` (new plan).
 
-Order: main/cover picture, title, when, categories, stars (logged only), **places search + N places each with map/stars**, other photos, optional first comment on create.
+Order: main/cover picture, title, when, categories, **your stars** (logged only; does not overwrite the other person's), **places search + N places each with map/stars**, other photos, optional first comment on create.
+
+Diary/detail cards list both profiles' names and stars. Old dates with only `overallRating` attribute that score to `createdBy`.
+
+Plans may omit a day: `happenedAt: null` and the form option **I'm not sure yet**. They still show on Plans (Whenever). Calendar only plots plans that have a day. Mark as logged uses today if no day was set. Dates listener orders by `createdAt` so undated plans are not dropped.
 
 Places: `PlaceSearch` (Photon, 2+ chars, ~280ms debounce). User **must tap a result** so lat/lng exist. Typing a name without selecting does not pin a map.
 
@@ -148,7 +164,7 @@ Cover vs extras: `cover` is the list poster and detail hero. `photos` are the ga
 
 ### Date detail `date/[id].tsx`
 
-Hero = cover. Places section: overview map if 2+ pins, then each place. Photos grid = extras. Comments are YouTube-style: avatar + composer + newest first. Author can delete their own comment. Planned dates have **Mark as logged**.
+Hero = cover. Places section: overview map if 2+ pins, then each place. Photos grid = extras. Tapping cover or a grid photo opens a swipeable viewer (cover first, then extras). Comments are YouTube-style: avatar + composer + newest first. Author can delete their own comment. Planned dates have **Mark as logged**.
 
 ### Welcome / profiles
 
@@ -172,9 +188,11 @@ src/
   theme.ts                colors, spacing, radius
 ```
 
-`AppContext` exposes: `profiles`, `currentProfile`, `dates`, `loggedDates`, `plannedDates`, profile CRUD, `addDate` / `saveDate`, `addDateComment` / `removeDateComment`, `changeDateStatus`, `removeDate`, `removeProfile`, `signOutProfile`.
+`AppContext` exposes: `profiles`, `currentProfile`, `dates`, `loggedDates`, `plannedDates`, profile CRUD, `addDate` / `saveDate`, `addDateComment` / `removeDateComment`, `changeDateStatus`, `removeDate`, `removeProfile`, `signOutProfile`, `spinPlaces`, `wheelExcludedKeys`, `setWheelIncluded`.
 
-Firestore listeners: `profiles` ordered by `createdAt` asc, `dates` by `happenedAt` desc.
+Spin catalog = planned date places + custom `spinPlaces`. Checkboxes write `settings/wheel.excludedKeys` so both phones share what is on the wheel. The wheel itself only spins checked places.
+
+Firestore listeners: `profiles` ordered by `createdAt` asc, `dates` by `createdAt` desc (sort logged/planned by `happenedAt` in the app).
 
 Photos: resize (cover/gallery width 1600, avatars 600), JPEG ~0.72, `uploadBytes` + `getDownloadURL`.
 

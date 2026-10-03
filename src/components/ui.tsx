@@ -15,6 +15,7 @@ export function Button({ label, onPress, variant = 'primary', loading, disabled 
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
+      android_ripple={{ color: 'rgba(0,0,0,0.18)' }}
       style={[
         styles.button,
         variant === 'ghost' && styles.ghost,
@@ -25,7 +26,9 @@ export function Button({ label, onPress, variant = 'primary', loading, disabled 
       {loading ? (
         <ActivityIndicator color={variant === 'ghost' ? colors.accent : colors.bg} />
       ) : (
-        <Text style={[styles.buttonText, variant !== 'primary' && styles.altText]}>{label}</Text>
+        <Text style={[styles.buttonText, variant !== 'primary' && styles.altText]} pointerEvents="none">
+          {label}
+        </Text>
       )}
     </Pressable>
   );
@@ -53,6 +56,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     borderRadius: radius.md,
     minHeight: 50,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,

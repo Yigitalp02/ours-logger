@@ -17,6 +17,7 @@ export default function TabLayout() {
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textDim,
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
@@ -41,10 +42,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="places"
+        name="spin"
         options={{
-          title: 'Places',
-          tabBarIcon: ({ color, size }) => <Ionicons name="map-outline" color={color} size={size} />,
+          title: 'Spin',
+          tabBarIcon: ({ color, size }) => <Ionicons name="disc-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen

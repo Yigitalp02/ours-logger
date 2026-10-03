@@ -1,11 +1,12 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/Avatar';
 import { Button, Field } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
+import { useKeyboardBottomInset } from '@/lib/keyboard';
 import { colors, radius } from '@/theme';
 import { MAX_PROFILES } from '@/types';
 
@@ -14,6 +15,7 @@ export default function WelcomeScreen() {
   const [name, setName] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const keyboardInset = useKeyboardBottomInset();
   const canCreate = profiles.length < MAX_PROFILES;
 
   async function pickPhoto() {
@@ -48,7 +50,12 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 32 + keyboardInset }]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         <Text style={styles.kicker}>Ours</Text>
         <Text style={styles.title}>Who is logging tonight?</Text>
         <Text style={styles.body}>
@@ -86,6 +93,7 @@ export default function WelcomeScreen() {
           <Text style={styles.note}>Both profiles are already created. Pick yours above.</Text>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

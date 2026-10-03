@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { searchPlaces } from '@/services/places';
 import { colors, radius } from '@/theme';
@@ -16,31 +16,34 @@ export function PlaceSearch({ onSelect }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setResults([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+  const trimmed = query.trim();
+  const searching = trimmed.length >= 2;
 
-    setLoading(true);
+  useEffect(() => {
+    if (!searching) return;
+
+    let cancelled = false;
     const handle = setTimeout(async () => {
+      setLoading(true);
       try {
         const next = await searchPlaces(trimmed);
+        if (cancelled) return;
         setResults(next);
         setError(next.length ? null : 'No matching places. Try a more specific name.');
       } catch (searchError) {
+        if (cancelled) return;
         setResults([]);
         setError(searchError instanceof Error ? searchError.message : 'Search failed.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 280);
 
-    return () => clearTimeout(handle);
-  }, [query]);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [searching, trimmed]);
 
   return (
     <View style={styles.wrap}>
@@ -54,27 +57,36 @@ export function PlaceSearch({ onSelect }: Props) {
           style={styles.input}
           autoCorrect={false}
         />
-        {loading ? <ActivityIndicator color={colors.accent} size="small" /> : null}
+        {searching && loading ? <ActivityIndicator color={colors.accent} size="small" /> : null}
       </View>
-      {error && !loading ? <Text style={styles.error}>{error}</Text> : null}
-      {results.map((result) => (
-        <Pressable
-          key={`${result.lat}-${result.lng}-${result.name}`}
-          style={styles.result}
-          onPress={() => {
-            onSelect(result);
-            setQuery('');
-            setResults([]);
-            setError(null);
-          }}
+      {searching && error && !loading ? <Text style={styles.error}>{error}</Text> : null}
+      {searching && results.length ? (
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+          style={styles.results}
+          contentContainerStyle={styles.resultsInner}
         >
-          <Ionicons name="location-outline" size={18} color={colors.accent} />
-          <View style={styles.resultMeta}>
-            <Text style={styles.resultName}>{result.name}</Text>
-            <Text style={styles.resultAddress}>{result.address}</Text>
-          </View>
-        </Pressable>
-      ))}
+          {results.map((result) => (
+            <Pressable
+              key={`${result.lat}-${result.lng}-${result.name}`}
+              style={styles.result}
+              onPress={() => {
+                onSelect(result);
+                setQuery('');
+                setResults([]);
+                setError(null);
+              }}
+            >
+              <Ionicons name="location-outline" size={18} color={colors.accent} />
+              <View style={styles.resultMeta}>
+                <Text style={styles.resultName}>{result.name}</Text>
+                <Text style={styles.resultAddress}>{result.address}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -101,6 +113,12 @@ const styles = StyleSheet.create({
   error: {
     color: colors.textMuted,
     fontSize: 13,
+  },
+  results: {
+    maxHeight: 220,
+  },
+  resultsInner: {
+    gap: 8,
   },
   result: {
     flexDirection: 'row',

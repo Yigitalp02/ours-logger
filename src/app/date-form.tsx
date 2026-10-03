@@ -23,9 +23,10 @@ import { StarRating } from '@/components/StarRating';
 import { Button, Field } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { createId } from '@/lib/id';
-import { formatLongDate } from '@/lib/format';
+import { formatWhen } from '@/lib/format';
+import { useKeyboardBottomInset } from '@/lib/keyboard';
 import { colors, radius } from '@/theme';
-import { datePlaces, type DatePhoto, type DatePlace, type Place } from '@/types';
+import { averageRating, datePlaces, dateRatings, type DatePhoto, type DatePlace, type Place } from '@/types';
 
 type DraftPhoto = {
   id: string;
@@ -47,10 +48,14 @@ export default function DateFormScreen() {
     existing?.status === 'planned' || (!existing && (Array.isArray(status) ? status[0] : status) === 'planned');
 
   const [title, setTitle] = useState(existing?.title ?? '');
+  const [dateUnknown, setDateUnknown] = useState(Boolean(isPlan && !existing?.happenedAt));
   const [happenedAt, setHappenedAt] = useState(existing?.happenedAt ?? (isPlan ? tomorrow() : new Date()));
   const [showPicker, setShowPicker] = useState(false);
   const [categories, setCategories] = useState<string[]>(existing?.categories ?? []);
-  const [overallRating, setOverallRating] = useState(existing?.overallRating ?? 0);
+  const existingRatings = existing ? dateRatings(existing) : {};
+  const [myRating, setMyRating] = useState(
+    currentProfile ? (existingRatings[currentProfile.id] ?? 0) : (existing?.overallRating ?? 0),
+  );
   const [places, setPlaces] = useState<DatePlace[]>(existing ? datePlaces(existing) : []);
   const [comment, setComment] = useState(
     existing?.comments.find((entry) => entry.profileId === currentProfile?.id)?.text ?? '',
@@ -62,6 +67,7 @@ export default function DateFormScreen() {
     existing?.photos.map((photo) => ({ id: photo.id, uri: photo.url, remote: photo })) ?? [],
   );
   const [saving, setSaving] = useState(false);
+  const keyboardInset = useKeyboardBottomInset();
 
   const myExistingComment = useMemo(
     () => existing?.comments.find((entry) => entry.profileId === currentProfile?.id),
@@ -70,7 +76,10 @@ export default function DateFormScreen() {
 
   function onDateChange(_event: DateTimePickerEvent, date?: Date) {
     if (Platform.OS === 'android') setShowPicker(false);
-    if (date) setHappenedAt(date);
+    if (date) {
+      setDateUnknown(false);
+      setHappenedAt(date);
+    }
   }
 
   async function pickFromLibrary(multiple: boolean) {
@@ -114,11 +123,14 @@ export default function DateFormScreen() {
       const newPhotoUris = photos.filter((photo) => !photo.remote).map((photo) => photo.uri);
       const draft = {
         title,
-        happenedAt,
+        happenedAt: isPlan && dateUnknown ? null : happenedAt,
         status: isPlan ? 'planned' as const : 'logged' as const,
         categories,
         places,
-        overallRating,
+        ratings: currentProfile ? { ...existingRatings, [currentProfile.id]: myRating } : existingRatings,
+        overallRating: averageRating(
+          currentProfile ? { ...existingRatings, [currentProfile.id]: myRating } : existingRatings,
+        ),
         commentText: existing ? myExistingComment?.text : comment,
         cover: cover?.remote ?? null,
         newCoverUri: cover && !cover.remote ? cover.uri : null,
@@ -141,7 +153,11 @@ export default function DateFormScreen() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Stack.Screen options={{ title: existing ? (isPlan ? 'Edit plan' : 'Edit date') : isPlan ? 'New plan' : 'New date' }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 40 + keyboardInset }]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         <View style={styles.block}>
           <Text style={styles.label}>Main picture</Text>
           <Pressable style={styles.cover} onPress={pickCover}>
@@ -170,9 +186,36 @@ export default function DateFormScreen() {
 
         <View style={styles.block}>
           <Text style={styles.label}>When</Text>
-          <Pressable style={styles.dateButton} onPress={() => setShowPicker(true)}>
-            <Text style={styles.dateText}>{formatLongDate(happenedAt)}</Text>
-          </Pressable>
+          {isPlan ? (
+            <View style={styles.whenChoices}>
+              <Pressable
+                style={[styles.whenChip, dateUnknown && styles.whenChipOn]}
+                onPress={() => {
+                  setDateUnknown(true);
+                  setShowPicker(false);
+                }}
+              >
+                <Ionicons name="help-circle-outline" size={18} color={dateUnknown ? colors.rose : colors.textMuted} />
+                <Text style={[styles.whenChipText, dateUnknown && styles.whenChipTextOn]}>{"I'm not sure yet"}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.whenChip, !dateUnknown && styles.whenChipOn]}
+                onPress={() => {
+                  setDateUnknown(false);
+                  setShowPicker(true);
+                }}
+              >
+                <Ionicons name="calendar-outline" size={18} color={!dateUnknown ? colors.rose : colors.textMuted} />
+                <Text style={[styles.whenChipText, !dateUnknown && styles.whenChipTextOn]}>
+                  {dateUnknown ? 'Pick a day' : formatWhen(happenedAt)}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable style={styles.dateButton} onPress={() => setShowPicker(true)}>
+              <Text style={styles.dateText}>{formatWhen(happenedAt)}</Text>
+            </Pressable>
+          )}
           {showPicker ? (
             <DateTimePicker value={happenedAt} mode="date" onChange={onDateChange} />
           ) : null}
@@ -185,8 +228,11 @@ export default function DateFormScreen() {
 
         {!isPlan ? (
           <View style={styles.block}>
-            <Text style={styles.label}>Date stars</Text>
-            <StarRating value={overallRating} onChange={setOverallRating} />
+            <Text style={styles.label}>
+              {currentProfile?.name ? `${currentProfile.name}'s stars` : 'Your stars'}
+            </Text>
+            <Text style={styles.osm}>Only your rating. The other person sets theirs when they edit this date.</Text>
+            <StarRating value={myRating} onChange={setMyRating} />
           </View>
         ) : null}
 
@@ -309,6 +355,23 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   dateText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  whenChoices: { gap: 8 },
+  whenChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: 14,
+  },
+  whenChipOn: {
+    borderColor: colors.rose,
+    backgroundColor: 'rgba(232, 90, 113, 0.12)',
+  },
+  whenChipText: { color: colors.textMuted, fontSize: 16, fontWeight: '600' },
+  whenChipTextOn: { color: colors.text },
   resultName: { color: colors.text, fontWeight: '700' },
   resultAddress: { color: colors.textMuted, marginTop: 3, fontSize: 12 },
   osm: { color: colors.textDim, fontSize: 12, lineHeight: 18 },

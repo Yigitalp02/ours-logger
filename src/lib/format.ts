@@ -1,3 +1,5 @@
+const UNSURE_LABEL = 'Date: Not sure yet';
+
 export function formatLongDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
@@ -15,6 +17,14 @@ export function formatShortDate(date: Date): string {
   });
 }
 
+export function formatWhen(date: Date | null | undefined): string {
+  return date ? `Date: ${formatLongDate(date)}` : UNSURE_LABEL;
+}
+
+export function formatWhenShort(date: Date | null | undefined): string {
+  return date ? `Date: ${formatShortDate(date)}` : UNSURE_LABEL;
+}
+
 export function formatMonthYear(date: Date): string {
   return date.toLocaleDateString('en-US', {
     month: 'long',
@@ -22,7 +32,8 @@ export function formatMonthYear(date: Date): string {
   });
 }
 
-export function sameDay(a: Date, b: Date): boolean {
+export function sameDay(a: Date | null | undefined, b: Date): boolean {
+  if (!a || Number.isNaN(a.getTime())) return false;
   return (
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&

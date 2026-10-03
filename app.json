@@ -22,7 +22,9 @@
       }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "pan",
       "package": "com.ours.datelogger",
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "backgroundColor": "#0C1115",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -40,12 +42,29 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0C1115",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
       "expo-router",
       [
         "expo-image-picker",
         {
           "photosPermission": "Ours uses your photos so you can add them to date logs and your profile.",
           "cameraPermission": "Ours uses the camera so you can add photos to date logs."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
         }
       ]
     ],

@@ -4,7 +4,8 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   Alert,
-  Modal,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,13 +16,15 @@ import {
 
 import { Avatar } from '@/components/Avatar';
 import { CategoryChips } from '@/components/CategoryChips';
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { PlaceMap } from '@/components/PlaceMap';
 import { StarRating } from '@/components/StarRating';
 import { Button } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
-import { formatLongDate, formatRelativeTime, formatStars } from '@/lib/format';
+import { formatRelativeTime, formatStars, formatWhen } from '@/lib/format';
+import { useKeyboardBottomInset } from '@/lib/keyboard';
 import { colors, radius } from '@/theme';
-import { datePlaces } from '@/types';
+import { datePlaces, dateRatings } from '@/types';
 
 export default function DateDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,10 +34,19 @@ export default function DateDetailScreen() {
   const item = dates.find((date) => date.id === dateId);
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
-  const [viewer, setViewer] = useState<string | null>(null);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const keyboardInset = useKeyboardBottomInset();
 
   const planned = item?.status === 'planned';
   const places = item ? datePlaces(item) : [];
+  const gallery = useMemo(() => {
+    if (!item) return [];
+    const extras = item.photos.map((photo) => photo.url);
+    if (item.cover?.url && !extras.includes(item.cover.url)) {
+      return [item.cover.url, ...extras];
+    }
+    return extras;
+  }, [item]);
   const comments = useMemo(
     () =>
       [...(item?.comments ?? [])].sort(
@@ -95,24 +107,44 @@ export default function DateDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, { paddingBottom: 40 + keyboardInset }]}
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
+    >
       <Stack.Screen options={{ title: item.title }} />
       {item.cover?.url ? (
-        <Pressable onPress={() => setViewer(item.cover!.url)}>
+        <Pressable onPress={() => setViewerIndex(Math.max(gallery.indexOf(item.cover!.url), 0))}>
           <Image source={{ uri: item.cover.url }} style={styles.hero} contentFit="cover" />
         </Pressable>
       ) : null}
       <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.when}>{formatLongDate(item.happenedAt)}</Text>
+      <Text style={styles.when}>{formatWhen(item.happenedAt)}</Text>
       {item.status === 'planned' ? (
         <View style={styles.badge}>
           <Ionicons name="bookmark" size={14} color={colors.rose} />
           <Text style={styles.badgeText}>Planned</Text>
         </View>
       ) : (
-        <View style={styles.ratingRow}>
-          <StarRating value={item.overallRating} readonly size={22} />
-          <Text style={styles.score}>{formatStars(item.overallRating)}</Text>
+        <View style={styles.peopleRatings}>
+          {profiles.map((profile) => {
+            const value = dateRatings(item)[profile.id] ?? 0;
+            return (
+              <View key={profile.id} style={styles.personRating}>
+                <Text style={styles.personName}>{profile.name}</Text>
+                {value > 0 ? (
+                  <View style={styles.ratingRow}>
+                    <StarRating value={value} readonly size={20} />
+                    <Text style={styles.score}>{formatStars(value)}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.scoreMuted}>No stars yet</Text>
+                )}
+              </View>
+            );
+          })}
         </View>
       )}
       {item.categories.length ? <CategoryChips selected={item.categories} readonly /> : null}
@@ -141,7 +173,11 @@ export default function DateDetailScreen() {
           <Text style={styles.section}>Photos</Text>
           <View style={styles.grid}>
             {item.photos.map((photo) => (
-              <Pressable key={photo.id} style={styles.gridItem} onPress={() => setViewer(photo.url)}>
+              <Pressable
+                key={photo.id}
+                style={styles.gridItem}
+                onPress={() => setViewerIndex(Math.max(gallery.indexOf(photo.url), 0))}
+              >
                 <Image source={{ uri: photo.url }} style={styles.gridImage} contentFit="cover" />
               </Pressable>
             ))}
@@ -206,12 +242,16 @@ export default function DateDetailScreen() {
       />
       <Button label={item.status === 'planned' ? 'Delete plan' : 'Delete date'} variant="danger" onPress={onDelete} />
 
-      <Modal visible={Boolean(viewer)} transparent animationType="fade" onRequestClose={() => setViewer(null)}>
-        <Pressable style={styles.viewer} onPress={() => setViewer(null)}>
-          {viewer ? <Image source={{ uri: viewer }} style={styles.viewerImage} contentFit="contain" /> : null}
-        </Pressable>
-      </Modal>
+      {viewerIndex != null ? (
+        <PhotoViewer
+          key={`${viewerIndex}-${gallery.length}`}
+          uris={gallery}
+          index={viewerIndex}
+          onClose={() => setViewerIndex(null)}
+        />
+      ) : null}
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -223,8 +263,12 @@ const styles = StyleSheet.create({
   when: { color: colors.textMuted, fontSize: 15, marginTop: -6 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badgeText: { color: colors.rose, fontWeight: '800' },
+  peopleRatings: { gap: 8 },
+  personRating: { gap: 4 },
+  personName: { color: colors.text, fontWeight: '700' },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   score: { color: colors.star, fontWeight: '800', fontSize: 16 },
+  scoreMuted: { color: colors.textDim, fontSize: 14 },
   block: { gap: 10 },
   section: { color: colors.text, fontSize: 18, fontWeight: '800' },
   placeCard: {
@@ -281,12 +325,4 @@ const styles = StyleSheet.create({
   deleteComment: { color: colors.textDim, fontWeight: '700', fontSize: 12, marginTop: 2 },
   missing: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg, padding: 24 },
   missingText: { color: colors.textMuted },
-  viewer: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  viewerImage: { width: '100%', height: '80%' },
 });

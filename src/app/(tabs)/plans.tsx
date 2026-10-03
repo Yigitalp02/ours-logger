@@ -11,21 +11,21 @@ import { colors } from '@/theme';
 export default function PlansScreen() {
   const { plannedDates } = useApp();
   const today = startOfDay(new Date());
-  const upcoming = plannedDates.filter((item) => startOfDay(item.happenedAt) >= today);
-  const past = plannedDates.filter((item) => startOfDay(item.happenedAt) < today);
+  const unsure = plannedDates.filter((item) => !item.happenedAt);
+  const upcoming = plannedDates.filter((item) => item.happenedAt && startOfDay(item.happenedAt) >= today);
+  const past = plannedDates.filter((item) => item.happenedAt && startOfDay(item.happenedAt) < today);
 
   return (
     <View style={styles.screen}>
       <FlatList
-        data={[...upcoming, ...past]}
+        data={[...unsure, ...upcoming, ...past]}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.title}>Plans</Text>
             <Text style={styles.sub}>
               {plannedDates.length
-                ? `${upcoming.length} upcoming · ${plannedDates.length} saved`
+                ? `${unsure.length ? `${unsure.length} whenever · ` : ''}${upcoming.length} upcoming · ${plannedDates.length} saved`
                 : 'Save a restaurant or a future night out'}
             </Text>
           </View>
@@ -33,11 +33,17 @@ export default function PlansScreen() {
         ListEmptyComponent={
           <EmptyState
             title="Nothing planned"
-            body="Add a future date and pin the place. When you go, mark it as logged and it moves into the diary."
+            body="Add a place even if you do not know the day yet. When you go, mark it as logged and it moves into the diary."
           />
         }
         renderItem={({ item }) => (
           <View>
+            {unsure.includes(item) && item.id === unsure[0]?.id ? (
+              <Text style={styles.section}>Whenever</Text>
+            ) : null}
+            {upcoming.includes(item) && item.id === upcoming[0]?.id && unsure.length ? (
+              <Text style={styles.section}>Upcoming</Text>
+            ) : null}
             {past.includes(item) && item.id === past[0]?.id ? (
               <Text style={styles.section}>Passed, still planned</Text>
             ) : null}
@@ -60,7 +66,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   list: { padding: 16, paddingBottom: 120 },
   header: { marginBottom: 18, gap: 4 },
-  title: { color: colors.text, fontSize: 26, fontWeight: '800' },
   sub: { color: colors.textMuted, fontSize: 15 },
   section: {
     color: colors.textMuted,
