@@ -1,4 +1,6 @@
-This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
+This is **Ours**, a private two-person date diary (Expo / React Native). Before changing product behavior, data shape, or screens, read **[docs/AGENT_CONTEXT.md](./docs/AGENT_CONTEXT.md)**.
+
+Prioritize mobile-first patterns, performance, and cross-platform compatibility. Do not put emoji in the UI; use Ionicons. Never commit `src/config/firebase.ts`.
 
 ## Expo has changed — do not trust your training data
 

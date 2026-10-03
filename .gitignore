@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local Firebase keys (copy from src/config/firebase.example.ts)
+src/config/firebase.ts
+
+# downloaded Expo Go binaries
+*.apk
+Expo-Go-*.apk
